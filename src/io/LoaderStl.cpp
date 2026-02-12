@@ -5,7 +5,7 @@
 //
 // LoaderStl.cpp
 //
-// Written by: <Your Name>
+// Written by: Ignas Karvelis
 //
 // Software developed for the course
 // Digital Geometry Processing
@@ -49,6 +49,70 @@
 
 const char* LoaderStl::_ext = "stl";
 
+
+bool LoaderStl::parseFacet(Tokenizer& tkn,
+                           vector<float>& coord,
+                           vector<int>& coordIndex,
+                           vector<float>& normal) {
+    // Check if current token is "facet"
+    if (!tkn.equals("facet")) {
+        return false;
+    }
+
+    // Get next token - should be "normal"
+    if (!tkn.get() || !tkn.equals("normal")) {
+        throw new StrException("Expected 'normal' after 'facet'");
+    }
+
+    float nx, ny, nz;
+    if (!tkn.getFloat(nx)) throw new StrException("Failed to parse normal x");
+    if (!tkn.getFloat(ny)) throw new StrException("Failed to parse normal y");
+    if (!tkn.getFloat(nz)) throw new StrException("Failed to parse normal z");
+    normal.push_back(nx);
+    normal.push_back(ny);
+    normal.push_back(nz);
+
+    // Parse: outer loop
+    if (!tkn.get() || !tkn.equals("outer")) {
+        throw new StrException("Expected 'outer' after normal");
+    }
+    if (!tkn.get() || !tkn.equals("loop")) {
+        throw new StrException("Expected 'loop' after 'outer'");
+    }
+
+    // Read three vertices
+    int startVertexIndex = coord.size() / 3;
+    for (int i = 0; i < 3; i++) {
+        if (!tkn.get() || !tkn.equals("vertex")) {
+            throw new StrException("Expected 'vertex' in loop");
+        }
+
+        float x, y, z;
+        if (!tkn.getFloat(x)) throw new StrException("Failed to parse vertex x");
+        if (!tkn.getFloat(y)) throw new StrException("Failed to parse vertex y");
+        if (!tkn.getFloat(z)) throw new StrException("Failed to parse vertex z");
+
+        coord.push_back(x);
+        coord.push_back(y);
+        coord.push_back(z);
+        coordIndex.push_back(startVertexIndex + i);
+    }
+
+    // Add face separator
+    coordIndex.push_back(-1);
+
+    if (!tkn.get() || !tkn.equals("endloop")) {
+        throw new StrException("Expected 'endloop'");
+    }
+
+    if (!tkn.get() || !tkn.equals("endfacet")) {
+        throw new StrException("Expected 'endfacet'");
+    }
+
+    return true;
+}
+
+
 bool LoaderStl::load(const char* filename, SceneGraph& wrl) {
   bool success = false;
 
@@ -81,7 +145,7 @@ bool LoaderStl::load(const char* filename, SceneGraph& wrl) {
 
       // from the IndexedFaceSet
       // 5) get references to the coordIndex, coord, and normal arrays
-      // 6) set the normalPerVertex variable to false (i.e., normals per face)  
+      // 6) set the normalPerVertex variable to false (i.e., normals per face)
 
       // the file should contain a list of triangles in the following format
 
@@ -101,12 +165,51 @@ bool LoaderStl::load(const char* filename, SceneGraph& wrl) {
       // - if your method returns false
       //     throw an StrException explaining why the method failed
 
+
+      // create the scene graph structure:
+      // 1)
+      Shape* shape = new Shape();
+      wrl.addChild(shape);
+
+      // 2)
+      Appearance* appearance = new Appearance();
+      shape->setAppearance(appearance);
+
+      // 3)
+      Material* material = new Material();
+      appearance->setMaterial(material);
+
+      // 4)
+      IndexedFaceSet* ifs = new IndexedFaceSet();
+      shape->setGeometry(ifs);
+      ifs->setName(stlName);
+
+      // 5)
+      vector<int>& coordIndex = ifs->getCoordIndex();
+      vector<float>& coord = ifs->getCoord();
+      vector<float>& normal = ifs->getNormal();
+
+      // 6)
+      ifs->setNormalPerVertex(false);
+
+      while (tkn.get() && parseFacet(tkn, coord, coordIndex, normal)) {
+      }
+
+      // Current token should be "endsolid"
+      // However, it seems that some test files don't follow this
+      // such as plastic-buckle-ascii.stl
+      if (!tkn.equals("endsolid")) {
+          throw new StrException("Expected 'endsolid' at end of file");
+      }
+
+      success = true;
+
     }
 
     // close the file (this statement may not be reached)
     fclose(fp);
     
-  } catch(StrException* e) { 
+  } catch(StrException* e) {
     
     if(fp!=(FILE*)0) fclose(fp);
     fprintf(stderr,"ERROR | %s\n",e->what());
@@ -116,4 +219,3 @@ bool LoaderStl::load(const char* filename, SceneGraph& wrl) {
 
   return success;
 }
-
