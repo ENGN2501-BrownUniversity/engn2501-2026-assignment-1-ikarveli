@@ -5,7 +5,7 @@
 //
 // LoaderStl.hpp
 //
-// Written by: <Your Name>
+// Written by: Ignas Karvelis
 //
 // Software developed for the course
 // Digital Geometry Processing
@@ -45,17 +45,17 @@
 class LoaderStl : public Loader {
 
 private:
-
-  const static char* _ext;
+    const static char* _ext;
+    bool parseFacet(Tokenizer& tkn, vector<float>& coord,vector<int>& coordIndex, vector<float>& normal);
 
 public:
+    LoaderStl()  {};
+    ~LoaderStl() {};
 
-  LoaderStl()  {};
-  ~LoaderStl() {};
-
-  bool  load(const char* filename, SceneGraph& wrl);
-  const char* ext() const { return _ext; }
+    bool  load(const char* filename, SceneGraph& wrl);
+    const char* ext() const { return _ext; }
 
 };
 
 #endif /* _LOADER_STL_HPP_ */
+

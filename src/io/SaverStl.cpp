@@ -5,7 +5,7 @@
 //
 // SaverStl.cpp
 //
-// Written by: <Your Name>
+// Written by: Ignas Karvelis
 //
 // Software developed for the course
 // Digital Geometry Processing
@@ -42,6 +42,8 @@
 #include "wrl/IndexedFaceSet.hpp"
 
 #include "core/Faces.hpp"
+#include <string.h>
+#include <stdio.h>
 
 const char* SaverStl::_ext = "stl";
 
@@ -65,6 +67,75 @@ bool SaverStl::save(const char* filename, SceneGraph& wrl) const {
 
     // if (all the conditions are satisfied) {
 
+
+    // Check condition 1)
+    if(wrl.getNumberOfChildren() != 1) {
+        return false;
+    }
+
+    Node* child = wrl[0];
+    if(child == (Node*)0) {
+        return false;
+    }
+
+    // Check condition 2)
+    if(!child->isShape()) {
+        return false;
+    }
+    Shape* shape = (Shape*)child;
+
+    // Check condition 3)
+    Node* geom = shape->getGeometry();
+    if(geom == (Node*)0 || !geom->isIndexedFaceSet()) {
+        return false;
+    }
+    IndexedFaceSet* ifs = (IndexedFaceSet*)geom;
+
+    // Get the data from IndexedFaceSet
+    vector<float>& coord = ifs->getCoord();
+    vector<int>& coordIndex = ifs->getCoordIndex();
+    vector<float>& normal = ifs->getNormal();
+    vector<int>& normalIndex = ifs->getNormalIndex();
+    int nV = coord.size() / 3;
+    Faces* faces = new Faces(nV, coordIndex);
+
+    // Check condition 4)
+    int nFaces = faces->getNumberOfFaces();
+    for(int iF = 0; iF < nFaces; iF++) {
+        if(faces->getFaceSize(iF) != 3) {
+            delete faces;
+            return false;
+        }
+    }
+
+    // Check condition 5)
+    if(ifs->getNormalPerVertex()) {
+        delete faces;
+        return false;
+    }
+
+    if(normal.size() == 0) {
+        delete faces;
+        return false;
+    }
+
+    int normalCount = 0;
+    if(normalIndex.size() > 0) {
+        for(int i = 0; i < (int)normalIndex.size(); i++) {
+            if(normalIndex[i] != -1) {
+                normalCount++;
+            }
+        }
+    } else {
+        normalCount = normal.size() / 3;
+    }
+
+    if(normalCount != nFaces) {
+        delete faces;
+        return false;
+    }
+
+
     FILE* fp = fopen(filename,"w");
     if(	fp!=(FILE*)0) {
 
@@ -72,12 +143,75 @@ bool SaverStl::save(const char* filename, SceneGraph& wrl) const {
       // otherwise use filename,
       // but first remove directory and extension
 
+      const char* solidName = "mesh";
+      string ifsName = ifs->getName();
+      if(ifsName.size() > 0) {
+          solidName = ifsName.c_str();
+      }
+
       fprintf(fp,"solid %s\n",filename);
 
       // TODO ...
       // for each face {
       //   ...
       // }
+
+      // Write each face
+      if(normalIndex.size() > 0) {
+          // Normals are indexed
+          int normalIdx = 0;
+          for(int iF = 0; iF < nFaces; iF++) {
+              while(normalIdx < (int)normalIndex.size() && normalIndex[normalIdx] == -1) {
+                  normalIdx++;
+              }
+
+              if(normalIdx < (int)normalIndex.size()) {
+                  int nIdx = normalIndex[normalIdx];
+                  float nx = normal[3 * nIdx + 0];
+                  float ny = normal[3 * nIdx + 1];
+                  float nz = normal[3 * nIdx + 2];
+
+                  fprintf(fp, "  facet normal %e %e %e\n", nx, ny, nz);
+                  fprintf(fp, "    outer loop\n");
+
+                  for(int j = 0; j < 3; j++) {
+                      int vIdx = faces->getFaceVertex(iF, j);
+                      float x = coord[3 * vIdx + 0];
+                      float y = coord[3 * vIdx + 1];
+                      float z = coord[3 * vIdx + 2];
+                      fprintf(fp, "      vertex %e %e %e\n", x, y, z);
+                  }
+
+                  fprintf(fp, "    endloop\n");
+                  fprintf(fp, "  endfacet\n");
+
+                  normalIdx++;
+              }
+          }
+      } else {
+          // Normals are not indexed
+          for(int iF = 0; iF < nFaces; iF++) {
+              float nx = normal[3 * iF + 0];
+              float ny = normal[3 * iF + 1];
+              float nz = normal[3 * iF + 2];
+
+              fprintf(fp, "  facet normal %e %e %e\n", nx, ny, nz);
+              fprintf(fp, "    outer loop\n");
+
+              for(int j = 0; j < 3; j++) {
+                  int vIdx = faces->getFaceVertex(iF, j);
+                  float x = coord[3 * vIdx + 0];
+                  float y = coord[3 * vIdx + 1];
+                  float z = coord[3 * vIdx + 2];
+                  fprintf(fp, "      vertex %e %e %e\n", x, y, z);
+              }
+
+              fprintf(fp, "    endloop\n");
+              fprintf(fp, "  endfacet\n");
+          }
+      }
+
+      fprintf(fp, "endsolid %s\n", solidName);
       
       fclose(fp);
       success = true;
